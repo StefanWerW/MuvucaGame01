@@ -3,7 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System;
 
-public abstract class Hero : MonoBehaviour
+public abstract class Hero : Controllable
 {
 	private static int _FACING_LEFT = -1;
 	private static int _FACING_RIGHT = 1;
@@ -51,14 +51,8 @@ public abstract class Hero : MonoBehaviour
 	private bool Crouched = false;
 	private bool CarryingByAction = false;
 	private GameObject CarriedObject;
-	public bool m_isActive = false;
-    public bool changeHeroAllowed = true;
-
-	public bool IsActive {
-		get { return m_isActive; }
-		protected set { m_isActive = value; }
-	}
-
+    private Collider2D[] colliders;
+	
 	private bool m_onAir = false;
 
 	public bool OnAir {
@@ -79,6 +73,7 @@ public abstract class Hero : MonoBehaviour
 
 		CalculateJumpForce ();
 		CalculateWalkingMotorAngularSpeed ();
+        colliders = GetComponentsInChildren<Collider2D>();
 	}
 
 	void FixedUpdate ()
@@ -190,8 +185,8 @@ public abstract class Hero : MonoBehaviour
 			GravityScale = gravityOriginal;
 			// The code comment bellow is to be undone when the animator animating climb and stop on ladder
 			/*
-			animator.SetBool ("climb", false);
-			animator.SetBool ("stopclimb", false);
+              animator.SetBool ("climb", false);
+              animator.SetBool ("stopclimb", false);
 			*/
 		}
 
@@ -304,13 +299,7 @@ public abstract class Hero : MonoBehaviour
 		motorMaxAngularSpeed = Mathf.Rad2Deg * maxWalkingSpeed / footRadius;
 
 	}
-
-
-	public void ChangeHero ()
-    {
-        if (changeHeroAllowed) m_isActive = !m_isActive;
-	}
-
+		
 	private void ChangeMotorSpeed (float speed)
 	{
 		JointMotor2D tMotor = walkMotor.motor;
@@ -338,12 +327,10 @@ public abstract class Hero : MonoBehaviour
 					CarryingByAction = true;
 				}
 			}
-
 		}
 		else{
 			ReleaseObject();
 		}
-
 	}
 
 	public float JumpHeight {
@@ -400,18 +387,25 @@ public abstract class Hero : MonoBehaviour
 	private void CarryObject(){
 		Carriable carriable = heroInterac.carriableObject.GetComponent<Carriable> ();
 		bool objIsInFront = heroInterac.carriableObject.transform.position.x*facingDirection > transform.position.x*facingDirection;
+		float fator = carriable.isHeavy()?1.5f:1f;
+
 		if (carriable != null && !carriable.isBeingCarried && objIsInFront && (!carriable.isHeavy () || this.IsStrong ())) {
-			float fator = carriable.isHeavy()?1.5f:1f;
-			Carrying = true;
-			CarriedObject = heroInterac.carriableObject;
-			SliderJoint2D sliderJoint = GetComponent<SliderJoint2D>();
-			CarriedObject.transform.rotation = new Quaternion(0, 0, 0, CarriedObject.transform.localRotation.w);
-			CarriedObject.transform.position = new Vector2 (transform.position.x, transform.position.y + transform.localScale.y + CarriedObject.transform.localScale.y + offsetCarryObjHero*fator);
-			sliderJoint.connectedBody = CarriedObject.GetComponent<Rigidbody2D> ();
-			sliderJoint.enabled = true;
-			carriable.isBeingCarried = true;
-			StopPush();
-			animator.SetBool ("carry", true);
+			Vector2 ls = heroInterac.transform.localScale;
+			Vector2 a = new Vector2(transform.position.x - ls.x/2, transform.position.y + transform.localScale.y + ls.y + offsetCarryObjHero*fator - ls.y/2);
+			Vector2 b = new Vector2(transform.position.x + ls.x/2, transform.position.y + transform.localScale.y + ls.y + offsetCarryObjHero*fator + ls.y/2);
+			Collider2D coll = Physics2D.OverlapArea(a, b);
+			if (coll == null) {
+				Carrying = true;
+				CarriedObject = heroInterac.carriableObject;
+				SliderJoint2D sliderJoint = GetComponent<SliderJoint2D> ();
+				CarriedObject.transform.rotation = new Quaternion (0, 0, 0, CarriedObject.transform.localRotation.w);
+				CarriedObject.transform.position = new Vector2 (transform.position.x, transform.position.y + transform.localScale.y + CarriedObject.transform.localScale.y + offsetCarryObjHero * fator);
+				sliderJoint.connectedBody = CarriedObject.GetComponent<Rigidbody2D> ();
+				sliderJoint.enabled = true;
+				carriable.isBeingCarried = true;
+				StopPush ();
+				animator.SetBool ("carry", true);
+			}
 		}
 
 	}
@@ -438,5 +432,15 @@ public abstract class Hero : MonoBehaviour
 		animator.SetBool ("carry", false);
 	}
 
-
+    public bool IsTouchingAreaTrigger()
+    {
+        foreach (Collider2D collider in colliders)
+        {
+            if (collider.IsTouchingLayers(LayerMask.GetMask("Triggers")))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 }
